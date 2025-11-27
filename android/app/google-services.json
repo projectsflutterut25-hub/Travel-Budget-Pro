@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "115527723160",
+    "project_id": "trippo-dece1",
+    "storage_bucket": "trippo-dece1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:115527723160:android:3040a4bb277fdaa5f1c8ed",
+        "android_client_info": {
+          "package_name": "com.example.travelbudget_pro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB3l9o_THZk-SHXipb1ZxCa2lyVTyR3UhU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
