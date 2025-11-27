@@ -3,13 +3,20 @@ import 'package:flutter/material.dart';
 import '../../models/app_user.dart';
 import '../../services/auth_service.dart';
 import '../auth/login_page.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../models/trip.dart';
 import '../../models/driver.dart';
 import '../../services/trip_service.dart';
 import '../../services/driver_service.dart';
 import '../../services/pdf_report_service.dart';
+
+import '../../services/tariff_service.dart';
+import '../../models/tariff_config.dart';
+
+// >>> IMPORTS PARA RUTAS <<<
+import '../../models/travel_route.dart';
+import '../../services/route_service.dart';
+import '../../services/google_maps_service.dart';
 
 class AdminHomePage extends StatefulWidget {
   final AppUser user;
@@ -48,7 +55,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
           ),
           Expanded(
             child: Container(
-              color: const Color(0xFFF3F4F6), // gris claro de fondo
+              color: const Color(0xFFF3F4F6),
               child: _buildSectionContent(_selected),
             ),
           ),
@@ -99,7 +106,6 @@ class _AdminSidebar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 24),
-          // Header
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(
@@ -125,7 +131,6 @@ class _AdminSidebar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          // Menu
           _SidebarItem(
             icon: Icons.insert_chart_outlined,
             label: 'Reportes',
@@ -157,7 +162,6 @@ class _AdminSidebar extends StatelessWidget {
             onTap: () => onSelect(AdminSection.users),
           ),
           const Spacer(),
-          // Usuario logueado (opcional)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(
@@ -180,7 +184,6 @@ class _AdminSidebar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          // Cerrar sesión
           _SidebarItem(
             icon: Icons.logout,
             label: 'Cerrar sesión',
@@ -275,7 +278,6 @@ class _ReportsViewState extends State<_ReportsView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Título + botón PDF
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -300,8 +302,6 @@ class _ReportsViewState extends State<_ReportsView> {
                 ],
               ),
               const SizedBox(height: 24),
-
-              // Tarjetas de métricas conectadas a Firestore
               Row(
                 children: [
                   _MetricCard(
@@ -331,14 +331,11 @@ class _ReportsViewState extends State<_ReportsView> {
                 ],
               ),
               const SizedBox(height: 24),
-
               const Text(
                 'Viajes Agendados',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 12),
-
-              // Lista dinámica de viajes agendados
               Expanded(
                 child: Card(
                   elevation: 1,
@@ -406,7 +403,6 @@ class _ScheduledTripTileState extends State<_ScheduledTripTile> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         children: [
-          // Información del viaje
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -443,8 +439,6 @@ class _ScheduledTripTileState extends State<_ScheduledTripTile> {
             ),
           ),
           const SizedBox(width: 16),
-
-          // Dropdown de conductores disponibles por tipo de vehículo
           SizedBox(
             width: 200,
             child: StreamBuilder<List<Driver>>(
@@ -485,8 +479,6 @@ class _ScheduledTripTileState extends State<_ScheduledTripTile> {
             ),
           ),
           const SizedBox(width: 12),
-
-          // Botón Completar
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF16A34A),
@@ -497,8 +489,6 @@ class _ScheduledTripTileState extends State<_ScheduledTripTile> {
             child: const Text('Completar'),
           ),
           const SizedBox(width: 8),
-
-          // Botón Cancelar (con penalización 50%)
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFDC2626),
@@ -576,12 +566,83 @@ class _MetricCard extends StatelessWidget {
 
 /// ------------------------ TARIFAS ------------------------
 
-class _PricingView extends StatelessWidget {
+class _PricingView extends StatefulWidget {
   const _PricingView();
 
   @override
+  State<_PricingView> createState() => _PricingViewState();
+}
+
+class _PricingViewState extends State<_PricingView> {
+  final _tariffService = TariffService();
+
+  final _baseFareCtrl = TextEditingController();
+  final _pricePerKmCtrl = TextEditingController();
+  final _pricePerMinCtrl = TextEditingController();
+  final _pricePerTollCtrl = TextEditingController();
+  final _fuelCostPerKmCtrl = TextEditingController();
+
+  final _extraSedanCtrl = TextEditingController();
+  final _extraSUVCtrl = TextEditingController();
+  final _extraVanCtrl = TextEditingController();
+  final _extraPickupCtrl = TextEditingController();
+
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadConfig();
+  }
+
+  Future<void> _loadConfig() async {
+    final cfg = await _tariffService.getConfigOnce();
+    _baseFareCtrl.text = cfg.baseFare.toString();
+    _pricePerKmCtrl.text = cfg.pricePerKm.toString();
+    _pricePerMinCtrl.text = cfg.pricePerMinute.toString();
+    _pricePerTollCtrl.text = cfg.pricePerToll.toString();
+    _fuelCostPerKmCtrl.text = cfg.fuelCostPerKm.toString();
+
+    _extraSedanCtrl.text = cfg.extraSedan.toString();
+    _extraSUVCtrl.text = cfg.extraSUV.toString();
+    _extraVanCtrl.text = cfg.extraVan.toString();
+    _extraPickupCtrl.text = cfg.extraPickup.toString();
+
+    setState(() => _loading = false);
+  }
+
+  double _parse(TextEditingController c, double def) {
+    return double.tryParse(c.text.replaceAll(',', '.')) ?? def;
+  }
+
+  Future<void> _saveConfig() async {
+    final config = TariffConfig(
+      baseFare: _parse(_baseFareCtrl, 50),
+      pricePerKm: _parse(_pricePerKmCtrl, 10),
+      pricePerMinute: _parse(_pricePerMinCtrl, 2),
+      pricePerToll: _parse(_pricePerTollCtrl, 35),
+      fuelCostPerKm: _parse(_fuelCostPerKmCtrl, 0.15),
+      extraSedan: _parse(_extraSedanCtrl, 0),
+      extraSUV: _parse(_extraSUVCtrl, 50),
+      extraVan: _parse(_extraVanCtrl, 80),
+      extraPickup: _parse(_extraPickupCtrl, 40),
+      currency: 'MXN',
+    );
+
+    await _tariffService.saveConfig(config);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Tarifas actualizadas (MXN).')),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Por ahora solo UI; luego conectas a Firestore
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: SingleChildScrollView(
@@ -589,7 +650,7 @@ class _PricingView extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Configuración de Tarifas',
+              'Configuración de Tarifas (MXN)',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 24),
@@ -606,43 +667,49 @@ class _PricingView extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Primera fila
                     Row(
-                      children: const [
-                        Expanded(
-                          child: _LabeledTextField(label: 'Tarifa Base (\$)'),
-                        ),
-                        SizedBox(width: 16),
+                      children: [
                         Expanded(
                           child: _LabeledTextField(
-                            label: 'Precio por Kilómetro (\$)',
+                            label: 'Tarifa Base (MXN)',
+                            controller: _baseFareCtrl,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _LabeledTextField(
+                            label: 'Precio por Kilómetro (MXN/km)',
+                            controller: _pricePerKmCtrl,
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     Row(
-                      children: const [
+                      children: [
                         Expanded(
                           child: _LabeledTextField(
-                            label: 'Precio por Minuto (\$)',
+                            label: 'Precio por Minuto (MXN/min)',
+                            controller: _pricePerMinCtrl,
                           ),
                         ),
-                        SizedBox(width: 16),
+                        const SizedBox(width: 16),
                         Expanded(
                           child: _LabeledTextField(
-                            label: 'Precio por Caseta (\$)',
+                            label: 'Precio por Caseta (MXN)',
+                            controller: _pricePerTollCtrl,
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    const _LabeledTextField(
-                      label: 'Consumo Combustible (\$/km)',
+                    _LabeledTextField(
+                      label: 'Consumo Combustible (MXN/km)',
+                      controller: _fuelCostPerKmCtrl,
                     ),
                     const SizedBox(height: 24),
                     const Text(
-                      'Tarifas por Tipo de Vehículo',
+                      'Tarifas por Tipo de Vehículo (recargo fijo MXN)',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -650,25 +717,37 @@ class _PricingView extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     Row(
-                      children: const [
+                      children: [
                         Expanded(
-                          child: _LabeledTextField(label: 'Sedan (Extra \$)'),
+                          child: _LabeledTextField(
+                            label: 'Sedan (Extra MXN)',
+                            controller: _extraSedanCtrl,
+                          ),
                         ),
-                        SizedBox(width: 16),
+                        const SizedBox(width: 16),
                         Expanded(
-                          child: _LabeledTextField(label: 'SUV (Extra \$)'),
+                          child: _LabeledTextField(
+                            label: 'SUV (Extra MXN)',
+                            controller: _extraSUVCtrl,
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     Row(
-                      children: const [
+                      children: [
                         Expanded(
-                          child: _LabeledTextField(label: 'Van (Extra \$)'),
+                          child: _LabeledTextField(
+                            label: 'Van (Extra MXN)',
+                            controller: _extraVanCtrl,
+                          ),
                         ),
-                        SizedBox(width: 16),
+                        const SizedBox(width: 16),
                         Expanded(
-                          child: _LabeledTextField(label: 'Pickup (Extra \$)'),
+                          child: _LabeledTextField(
+                            label: 'Pickup (Extra MXN)',
+                            controller: _extraPickupCtrl,
+                          ),
                         ),
                       ],
                     ),
@@ -683,9 +762,7 @@ class _PricingView extends StatelessWidget {
                             vertical: 12,
                           ),
                         ),
-                        onPressed: () {
-                          // TODO: guardar configuración en Firestore
-                        },
+                        onPressed: _saveConfig,
                         child: const Text('Guardar Cambios'),
                       ),
                     ),
@@ -702,12 +779,18 @@ class _PricingView extends StatelessWidget {
 
 class _LabeledTextField extends StatelessWidget {
   final String label;
+  final TextEditingController controller;
 
-  const _LabeledTextField({required this.label});
+  const _LabeledTextField({required this.label, required this.controller});
 
   @override
   Widget build(BuildContext context) {
     return TextField(
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(
+        decimal: true,
+        signed: false,
+      ),
       decoration: InputDecoration(
         labelText: label,
         border: const OutlineInputBorder(),
@@ -719,12 +802,18 @@ class _LabeledTextField extends StatelessWidget {
 
 /// ------------------------ RUTAS ------------------------
 
-class _RoutesView extends StatelessWidget {
+class _RoutesView extends StatefulWidget {
   const _RoutesView();
 
   @override
+  State<_RoutesView> createState() => _RoutesViewState();
+}
+
+class _RoutesViewState extends State<_RoutesView> {
+  final _routeService = RouteService();
+
+  @override
   Widget build(BuildContext context) {
-    // Por ahora estático; luego lo conectas a la colección "routes"
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -741,8 +830,17 @@ class _RoutesView extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2563EB),
                 ),
-                onPressed: () {
-                  // TODO: abrir formulario "Nueva Ruta"
+                onPressed: () async {
+                  await showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (_) => _RouteFormDialog(
+                      title: 'Nueva Ruta',
+                      onSubmit: (route) async {
+                        await _routeService.createRoute(route);
+                      },
+                    ),
+                  );
                 },
                 child: const Text('+ Nueva Ruta'),
               ),
@@ -755,24 +853,68 @@ class _RoutesView extends StatelessWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: ListView(
-                children: const [
-                  _RouteListItem(
-                    title: 'Ruta Centro',
-                    subtitle: 'Centro a Aeropuerto',
-                    distance: '25 km',
-                  ),
-                  _RouteListItem(
-                    title: 'Ruta Norte',
-                    subtitle: 'Zona Norte a Universidad',
-                    distance: '15 km',
-                  ),
-                  _RouteListItem(
-                    title: 'Ruta Sur',
-                    subtitle: 'Zona Sur a Plaza Central',
-                    distance: '20 km',
-                  ),
-                ],
+              child: StreamBuilder<List<TravelRoute>>(
+                stream: _routeService.listenRoutes(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final routes = snapshot.data ?? [];
+                  if (routes.isEmpty) {
+                    return const Center(
+                      child: Text('No hay rutas registradas.'),
+                    );
+                  }
+
+                  return ListView.separated(
+                    itemCount: routes.length,
+                    separatorBuilder: (_, __) => const Divider(height: 0),
+                    itemBuilder: (context, index) {
+                      final r = routes[index];
+                      return _RouteListItem(
+                        route: r,
+                        onEdit: () async {
+                          await showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (_) => _RouteFormDialog(
+                              title: 'Editar Ruta',
+                              initialRoute: r,
+                              onSubmit: (updated) async {
+                                await _routeService.updateRoute(updated);
+                              },
+                            ),
+                          );
+                        },
+                        onDelete: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('Eliminar ruta'),
+                              content: Text(
+                                '¿Seguro que deseas eliminar la ruta "${r.name}"?',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
+                                  child: const Text('Cancelar'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: const Text('Aceptar'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true) {
+                            await _routeService.deleteRoute(r.id);
+                          }
+                        },
+                      );
+                    },
+                  );
+                },
               ),
             ),
           ),
@@ -783,41 +925,359 @@ class _RoutesView extends StatelessWidget {
 }
 
 class _RouteListItem extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final String distance;
+  final TravelRoute route;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   const _RouteListItem({
-    required this.title,
-    required this.subtitle,
-    required this.distance,
+    required this.route,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text('$subtitle\nDistancia: $distance'),
+      title: Text(
+        route.name,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        '${route.originAddress} → ${route.destAddress}\n'
+        'Distancia: ${route.distanceKm.toStringAsFixed(1)} km | '
+        'Tiempo: ${route.durationMin.toStringAsFixed(0)} min | '
+        'Casetas: ${route.tollsCount}',
+      ),
       isThreeLine: true,
       trailing: Wrap(
         spacing: 12,
         children: [
+          TextButton(onPressed: onEdit, child: const Text('Editar')),
           TextButton(
-            onPressed: () {
-              // TODO: editar ruta
-            },
-            child: const Text('Editar'),
-          ),
-          TextButton(
-            onPressed: () {
-              // TODO: eliminar ruta
-            },
+            onPressed: onDelete,
             style: TextButton.styleFrom(
               foregroundColor: const Color(0xFFDC2626),
             ),
             child: const Text('Eliminar'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RouteFormDialog extends StatefulWidget {
+  final String title;
+  final TravelRoute? initialRoute;
+  final Future<void> Function(TravelRoute route) onSubmit;
+
+  const _RouteFormDialog({
+    required this.title,
+    this.initialRoute,
+    required this.onSubmit,
+  });
+
+  @override
+  State<_RouteFormDialog> createState() => _RouteFormDialogState();
+}
+
+class _RouteFormDialogState extends State<_RouteFormDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _mapsService = GoogleMapsService();
+
+  late TextEditingController _nameCtrl;
+  late TextEditingController _originCtrl;
+  late TextEditingController _destCtrl;
+  late TextEditingController _tollsCtrl;
+
+  double _originLat = 0;
+  double _originLng = 0;
+  double _destLat = 0;
+  double _destLng = 0;
+  double _distanceKm = 0;
+  double _durationMin = 0;
+
+  bool _calculating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final r = widget.initialRoute;
+    _nameCtrl = TextEditingController(text: r?.name ?? '');
+    _originCtrl = TextEditingController(text: r?.originAddress ?? '');
+    _destCtrl = TextEditingController(text: r?.destAddress ?? '');
+    _tollsCtrl = TextEditingController(text: r?.tollsCount.toString() ?? '0');
+
+    _originLat = r?.originLat ?? 0;
+    _originLng = r?.originLng ?? 0;
+    _destLat = r?.destLat ?? 0;
+    _destLng = r?.destLng ?? 0;
+    _distanceKm = r?.distanceKm ?? 0;
+    _durationMin = r?.durationMin ?? 0;
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _originCtrl.dispose();
+    _destCtrl.dispose();
+    _tollsCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _calculateRoute() async {
+    if (_originCtrl.text.isEmpty || _destCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Escribe origen y destino')));
+      return;
+    }
+
+    setState(() => _calculating = true);
+
+    try {
+      final (oLat, oLng) = await _mapsService.geocodeAddress(_originCtrl.text);
+      final (dLat, dLng) = await _mapsService.geocodeAddress(_destCtrl.text);
+
+      final (distanceKm, durationMin) = await _mapsService
+          .getDistanceAndDuration(
+            originLat: oLat,
+            originLng: oLng,
+            destLat: dLat,
+            destLng: dLng,
+          );
+
+      setState(() {
+        _originLat = oLat;
+        _originLng = oLng;
+        _destLat = dLat;
+        _destLng = dLng;
+        _distanceKm = distanceKm;
+        _durationMin = durationMin;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error al calcular la ruta: $e')));
+    } finally {
+      if (mounted) setState(() => _calculating = false);
+    }
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_distanceKm <= 0 || _durationMin <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Calcula la ruta (km y minutos) antes de guardar.'),
+        ),
+      );
+      return;
+    }
+
+    final tolls = int.tryParse(_tollsCtrl.text) ?? 0;
+
+    final route = TravelRoute(
+      id: widget.initialRoute?.id ?? '',
+      name: _nameCtrl.text.trim(),
+      originAddress: _originCtrl.text.trim(),
+      destAddress: _destCtrl.text.trim(),
+      originLat: _originLat,
+      originLng: _originLng,
+      destLat: _destLat,
+      destLng: _destLng,
+      distanceKm: _distanceKm,
+      durationMin: _durationMin,
+      tollsCount: tolls,
+    );
+
+    await widget.onSubmit(route);
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      widget.title,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre de la Ruta',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Ingresa un nombre'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _originCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Punto de Origen (dirección)',
+                    hintText:
+                        'Ej: Av. Insurgentes Sur 123, Ciudad de México, CDMX',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Ingresa el origen'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _destCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Punto de Destino (dirección)',
+                    hintText:
+                        'Ej: Aeropuerto Internacional CDMX, Ciudad de México',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Ingresa el destino'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Cálculo Automático',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1D4ED8),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text(
+                                  _distanceKm > 0
+                                      ? _distanceKm.toStringAsFixed(1)
+                                      : '--',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1D4ED8),
+                                  ),
+                                ),
+                                const Text('Kilómetros'),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text(
+                                  _durationMin > 0
+                                      ? _durationMin.toStringAsFixed(0)
+                                      : '--',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF16A34A),
+                                  ),
+                                ),
+                                const Text('Minutos'),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                TextFormField(
+                                  controller: _tollsCtrl,
+                                  textAlign: TextAlign.center,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text('Caseta(s)'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: OutlinedButton.icon(
+                          onPressed: _calculating ? null : _calculateRoute,
+                          icon: _calculating
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.map),
+                          label: const Text('Calcular con Maps'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancelar'),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed: _submit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                      ),
+                      child: const Text('Guardar'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -830,7 +1290,6 @@ class _DriversView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Más adelante llenas con Firestore "drivers"
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -962,7 +1421,6 @@ class _UsersView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Luego conectas a Firestore "users"
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(

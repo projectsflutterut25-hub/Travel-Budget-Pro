@@ -163,6 +163,41 @@ class _ClientNewTripPageState extends State<ClientNewTripPage> {
       return;
     }
 
+    // Mismos parámetros que usaste en _calculateCost
+    const double baseFare = 50; // tarifa base
+    const double pricePerKm = 8; // por km
+    const double pricePerMin = 1.5; // por minuto
+    const double tolls = 0; // casetas (por ahora 0)
+
+    // Costos variables según lo que ya calculaste
+    final double distanceKm = _distanceKm;
+    final double durationMin = _durationMin;
+
+    double vehicleMultiplier = 1.0;
+    switch (_selectedVehicleType) {
+      case 'SUV':
+        vehicleMultiplier = 1.3;
+        break;
+      case 'Van':
+        vehicleMultiplier = 1.6;
+        break;
+      default:
+        vehicleMultiplier = 1.0;
+    }
+
+    final distanceCost = distanceKm * pricePerKm;
+    final timeCost = durationMin * pricePerMin;
+    final tollsCost = tolls;
+
+    final raw = baseFare + distanceCost + timeCost + tollsCost;
+
+    // +5% por cada pasajero extra
+    final passengersFactor = 1 + (_passengers - 1) * 0.05;
+
+    // Total teórico antes de redondeo (solo para dejar traza en el breakdown)
+    final totalTeorico = raw * vehicleMultiplier * passengersFactor;
+
+    // Llamada a Firestore con desglose
     await _tripService.createTrip(
       clientId: widget.client.id,
       clientName: widget.client.displayName ?? widget.client.email,
@@ -170,7 +205,24 @@ class _ClientNewTripPageState extends State<ClientNewTripPage> {
       dateTime: _selectedDateTime,
       passengers: _passengers,
       vehicleType: _selectedVehicleType,
-      totalCost: _totalCost,
+      totalCost: _totalCost, // el que ya muestras al cliente
+      pricingBreakdown: {
+        'baseFare': baseFare,
+        'pricePerKm': pricePerKm,
+        'pricePerMin': pricePerMin,
+        'tollsUnit': tolls,
+        'distanceKm': distanceKm,
+        'durationMin': durationMin,
+        'distanceCost': distanceCost,
+        'timeCost': timeCost,
+        'tollsCost': tollsCost,
+        'vehicleMultiplier': vehicleMultiplier,
+        'passengers': _passengers,
+        'passengersFactor': passengersFactor,
+        'calculatedTotal': totalTeorico,
+        'shownTotal': _totalCost,
+        'currency': 'MXN',
+      },
     );
 
     if (!mounted) return;
@@ -211,7 +263,7 @@ class _ClientNewTripPageState extends State<ClientNewTripPage> {
                   ),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<TravelRoute>(
-                    value: _selectedRoute,
+                    initialValue: _selectedRoute,
                     items: _routes
                         .map(
                           (r) =>
@@ -258,7 +310,7 @@ class _ClientNewTripPageState extends State<ClientNewTripPage> {
                   ),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<int>(
-                    value: _passengers,
+                    initialValue: _passengers,
                     items: List.generate(
                       10,
                       (i) => DropdownMenuItem(
@@ -283,7 +335,7 @@ class _ClientNewTripPageState extends State<ClientNewTripPage> {
                   ),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
-                    value: _selectedVehicleType,
+                    initialValue: _selectedVehicleType,
                     items: const [
                       DropdownMenuItem(value: 'Sedan', child: Text('Sedan')),
                       DropdownMenuItem(value: 'SUV', child: Text('SUV')),

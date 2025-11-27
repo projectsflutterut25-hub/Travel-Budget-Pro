@@ -13,6 +13,9 @@ class TripService {
     required int passengers,
     required String vehicleType,
     required double totalCost,
+
+    /// NUEVO: mapa con el desglose de tarifas
+    Map<String, dynamic>? pricingBreakdown,
   }) async {
     await _col.add({
       'clientId': clientId,
@@ -27,6 +30,10 @@ class TripService {
       'driverId': null,
       'driverName': null,
       'driverPhone': null,
+
+      // NUEVO: se guarda el desglose dentro del doc
+      'pricingBreakdown': pricingBreakdown,
+
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });

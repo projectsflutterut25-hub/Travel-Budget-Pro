@@ -15,6 +15,10 @@ class Trip {
   final String? driverName;
   final String? driverPhone;
 
+  /// Desglose de tarifas (base, km, minutos, combustible, etc.)
+  /// Se guarda como Map para almacenarlo directo en Firestore.
+  final Map<String, dynamic>? pricingBreakdown;
+
   Trip({
     required this.id,
     required this.clientId,
@@ -29,6 +33,7 @@ class Trip {
     this.driverId,
     this.driverName,
     this.driverPhone,
+    this.pricingBreakdown,
   });
 
   factory Trip.fromDoc(DocumentSnapshot doc) {
@@ -47,6 +52,8 @@ class Trip {
       driverId: data['driverId'],
       driverName: data['driverName'],
       driverPhone: data['driverPhone'],
+      pricingBreakdown:
+          data['pricingBreakdown'] as Map<String, dynamic>?, // NUEVO
     );
   }
 
@@ -64,6 +71,7 @@ class Trip {
       'driverId': driverId,
       'driverName': driverName,
       'driverPhone': driverPhone,
+      'pricingBreakdown': pricingBreakdown, // NUEVO
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }

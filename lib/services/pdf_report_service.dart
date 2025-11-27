@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
 class PdfReportService {
@@ -11,11 +12,12 @@ class PdfReportService {
 
     final doc = pw.Document();
 
-    // Página de resumen de viajes
     doc.addPage(
       pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
         build: (context) {
           final trips = tripsSnap.docs;
+
           final completed = trips
               .where((t) => t['status'] == 'completed')
               .toList();
@@ -25,15 +27,15 @@ class PdfReportService {
           final cancelled = trips
               .where((t) => t['status'] == 'cancelled')
               .toList();
-          final income = trips.fold<double>(
-            0,
-            (sum, t) =>
-                sum +
-                ((t['status'] == 'completed' ? (t['totalCost'] ?? 0) : 0)
-                        as num)
-                    .toDouble() +
-                ((t['penaltyAmount'] ?? 0) as num).toDouble(),
-          );
+
+          // Ingreso total = viajes completados + penalizaciones
+          final income = trips.fold<double>(0, (sum, t) {
+            final status = t['status'] ?? '';
+            final total = ((t['totalCost'] ?? 0) as num).toDouble();
+            final penalty = ((t['penaltyAmount'] ?? 0) as num).toDouble();
+            final base = status == 'completed' ? total : 0.0;
+            return sum + base + penalty;
+          });
 
           return [
             pw.Text(
@@ -48,11 +50,13 @@ class PdfReportService {
             pw.Bullet(text: 'Cancelados: ${cancelled.length}'),
             pw.Bullet(
               text:
-                  'Ingresos totales (viajes + penalizaciones): \$${income.toStringAsFixed(2)}',
+                  'Ingresos totales (viajes + penalizaciones): \$${income.toStringAsFixed(2)} MXN',
             ),
             pw.SizedBox(height: 16),
+
+            // ---------------- DETALLE DE VIAJES CON DESGLOSE ----------------
             pw.Text(
-              'Detalle de viajes',
+              'Detalle de viajes (ingresos y desglose)',
               style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 8),
@@ -61,23 +65,55 @@ class PdfReportService {
                 'Fecha',
                 'Cliente',
                 'Ruta',
-                'Estado',
-                'Total',
+                'Vehículo',
+                'Dist. (km)',
+                'Tiempo (min)',
+                'Total (MXN)',
                 'Penalización',
+                'Ingreso',
+                'Estado',
                 'Conductor',
               ],
               data: trips.map((t) {
+                final data = t.data();
+                final status = data['status'] ?? '';
+
+                // total y penalización
+                final total = ((data['totalCost'] ?? 0) as num).toDouble();
+                final penalty = ((data['penaltyAmount'] ?? 0) as num)
+                    .toDouble();
+
+                // Ingreso efectivo: solo suma total completo si está "completed" + penalización
+                final ingreso = (status == 'completed' ? total : 0.0) + penalty;
+
+                // Desglose guardado en pricingBreakdown
+                final pb =
+                    (data['pricingBreakdown'] ?? <String, dynamic>{})
+                        as Map<String, dynamic>;
+
+                final distanceKm = ((pb['distanceKm'] ?? 0) as num).toDouble();
+                final durationMin = ((pb['durationMin'] ?? 0) as num)
+                    .toDouble();
+
+                final dateStr = (data['dateTime'] as Timestamp)
+                    .toDate()
+                    .toString()
+                    .substring(0, 16);
+
+                final driverName = data['driverName'] ?? '';
+
                 return [
-                  (t['dateTime'] as Timestamp).toDate().toString().substring(
-                    0,
-                    16,
-                  ),
-                  t['clientName'] ?? '',
-                  t['routeName'] ?? '',
-                  t['status'] ?? '',
-                  '\$${(t['totalCost'] ?? 0).toString()}',
-                  '\$${(t['penaltyAmount'] ?? 0).toString()}',
-                  t['driverName'] ?? '',
+                  dateStr,
+                  data['clientName'] ?? '',
+                  data['routeName'] ?? '',
+                  data['vehicleType'] ?? '',
+                  distanceKm.toStringAsFixed(1),
+                  durationMin.toStringAsFixed(0),
+                  total.toStringAsFixed(2),
+                  penalty.toStringAsFixed(2),
+                  ingreso.toStringAsFixed(2),
+                  status,
+                  driverName,
                 ];
               }).toList(),
               cellStyle: const pw.TextStyle(fontSize: 9),
@@ -85,8 +121,15 @@ class PdfReportService {
                 fontSize: 10,
                 fontWeight: pw.FontWeight.bold,
               ),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.grey300,
+              ),
+              cellAlignment: pw.Alignment.centerLeft,
             ),
+
             pw.SizedBox(height: 20),
+
+            // ---------------- CONDUCTORES ----------------
             pw.Text(
               'Conductores',
               style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
@@ -107,6 +150,9 @@ class PdfReportService {
               headerStyle: pw.TextStyle(
                 fontSize: 10,
                 fontWeight: pw.FontWeight.bold,
+              ),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.grey300,
               ),
             ),
           ];
