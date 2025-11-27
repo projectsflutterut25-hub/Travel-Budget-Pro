@@ -1,0 +1,16 @@
+.git
+.gitignore
+**/android
+**/ios
+**/macos
+**/windows
+**/linux
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache
+.pub
+.idea
+.vscode
+*.log
+build
