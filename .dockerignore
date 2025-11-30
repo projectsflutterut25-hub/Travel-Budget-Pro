@@ -1,16 +1,31 @@
+# Git
 .git
 .gitignore
-**/android
-**/ios
-**/macos
-**/windows
-**/linux
+
+# Configs de IDE
+.vscode
+.idea
+*.iml
+
+# Artefactos de compilación
+build
+.dart_tool
+.packages
 .flutter-plugins
 .flutter-plugins-dependencies
-.packages
-.pub-cache
-.pub
-.idea
-.vscode
+
+# Plataformas nativas que no se necesitan para web
+android
+ios
+macos
+windows
+linux
+
+# Tests
+test
+
+# Archivos temporales / ruido
 *.log
-build
+*.tmp
+*.swp
+*.md~
